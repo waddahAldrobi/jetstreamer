@@ -86,6 +86,8 @@ ctrlc = "3"
 indoc = "2"
 tempfile = "3"
 libc = "0"
+aws-sdk-s3 = "1"
+aws-config = "1"
 
 [dependencies]
 tokio.workspace = true

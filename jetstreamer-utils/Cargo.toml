@@ -28,5 +28,8 @@ libc.workspace = true
 solana-logger.workspace = true
 ctrlc.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["std"] }
 once_cell.workspace = true
+aws-sdk-s3.workspace = true
+aws-config.workspace = true
+tokio-stream.workspace = true
