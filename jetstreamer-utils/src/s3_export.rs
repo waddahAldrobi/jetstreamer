@@ -3,9 +3,11 @@ use aws_sdk_s3::{Client as S3Client, error::ProvideErrorMetadata, primitives::By
 use once_cell::sync::OnceCell;
 use serde::Serialize;
 use tokio::sync::OnceCell as TokioOnceCell;
+use uuid::Uuid;
 
 static S3_BUCKET: OnceCell<String> = OnceCell::new();
 static AWS_CONFIG: TokioOnceCell<aws_config::SdkConfig> = TokioOnceCell::const_new();
+static RUN_UUID: OnceCell<String> = OnceCell::new();
 
 /// Sets the S3 bucket name for S3 export.
 /// This should be called once during initialization.
@@ -16,6 +18,26 @@ pub fn set_bucket(bucket: String) {
 /// Gets the current S3 bucket name, if set.
 pub fn get_bucket() -> Option<&'static str> {
     S3_BUCKET.get().map(|s| s.as_str())
+}
+
+/// Gets or initializes the run UUID with datetime prefix.
+/// The UUID is generated once per run and shared across all plugins.
+/// Format: `YYYY-MM-DDTHH:MM:SSZ-{uuid}`
+fn get_run_uuid() -> &'static str {
+    RUN_UUID.get_or_init(|| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        
+        // Format as ISO 8601: YYYY-MM-DDTHH:MM:SSZ
+        // Convert Unix timestamp to UTC datetime
+        let datetime_utc = chrono::DateTime::<chrono::Utc>::from_timestamp(now as i64, 0)
+            .unwrap_or_else(|| chrono::Utc::now());
+        let datetime_str = datetime_utc.format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let uuid = Uuid::new_v4();
+        format!("{}-{}", datetime_str, uuid)
+    })
 }
 
 /// Gets or initializes the AWS config (lazy initialization, only loads once).
@@ -33,7 +55,8 @@ async fn get_aws_config() -> &'static aws_config::SdkConfig {
 }
 
 /// Writes rows to a JSONL file in S3.
-/// Files are written to `s3://<bucket>/<table_name>/<timestamp>.jsonl`.
+/// Files are written to `s3://<bucket>/<datetime-prefixed-uuid>/<table_name>/<timestamp>.jsonl`.
+/// The datetime-prefixed UUID is generated once per run and shared across all plugins.
 pub async fn write_to_s3<T: Serialize>(
     table_name: &str,
     rows: Vec<T>,
@@ -52,12 +75,13 @@ pub async fn write_to_s3<T: Serialize>(
         jsonl_content.push(b'\n');
     }
 
-    // Generate S3 key with timestamp
+    // Generate S3 key with run UUID prefix and timestamp
+    let run_uuid = get_run_uuid();
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let key = format!("{}/{}.jsonl", table_name, timestamp);
+    let key = format!("{}/{}/{}.jsonl", run_uuid, table_name, timestamp);
 
     // Get or initialize AWS config (only loads once, preventing repeated credential logs)
     let config = get_aws_config().await;
