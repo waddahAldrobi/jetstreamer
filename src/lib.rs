@@ -622,6 +622,10 @@ pub fn parse_cli_args() -> Result<Config, Box<dyn std::error::Error>> {
                 // We'll handle --export in the post-selection code block.
                 i += 2; // skip the flag and its param
             }
+            "--bucket" => {
+                // We'll handle --bucket in the post-selection code block.
+                i += 2; // skip the flag and its param
+            }
             other if first_arg.is_none() => {
                 first_arg = Some(other.to_string());
                 i += 1;
