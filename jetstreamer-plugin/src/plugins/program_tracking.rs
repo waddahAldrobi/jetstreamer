@@ -188,12 +188,14 @@ impl Plugin for ProgramTrackingPlugin {
                             ))
                         })?;
                 } else if export_format == Some("s3") {
-                    let rows_clone = rows.clone();
-                    tokio::spawn(async move {
-                        if let Err(err) = write_to_s3("program_invocations", rows_clone).await {
-                            error!("failed to write program invocations to S3: {}", err);
-                        }
-                    });
+                    write_to_s3("program_invocations", rows.clone())
+                        .await
+                        .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
+                            Box::new(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                err.to_string(),
+                            ))
+                        })?;
                 }
             }
 
