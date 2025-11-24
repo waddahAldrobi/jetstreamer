@@ -10,7 +10,7 @@ use solana_message::VersionedMessage;
 
 use crate::{Plugin, PluginFuture};
 use jetstreamer_firehose::firehose::{BlockData, TransactionData};
-use jetstreamer_utils::{get_export_format, write_to_jsonl};
+use jetstreamer_utils::{get_export_format, write_to_jsonl, write_to_s3};
 
 const DB_WRITE_INTERVAL_SLOTS: u64 = 1;
 
@@ -175,10 +175,20 @@ impl Plugin for ProgramTrackingPlugin {
                 }
             });
 
-            // Write to JSONL file if export format is jsonl and flush_rows is not None
+            // Write to JSONL file or S3 if export format is set and flush_rows is not None
             if let Some(ref rows) = flush_rows {
-                if get_export_format() == Some("jsonl") {
+                let export_format = get_export_format();
+                if export_format == Some("jsonl") {
                     write_to_jsonl("program_invocations", rows.clone())
+                        .await
+                        .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
+                            Box::new(std::io::Error::new(
+                                std::io::ErrorKind::Other,
+                                err.to_string(),
+                            ))
+                        })?;
+                } else if export_format == Some("s3") {
+                    write_to_s3("program_invocations", rows.clone())
                         .await
                         .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
                             Box::new(std::io::Error::new(

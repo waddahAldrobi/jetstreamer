@@ -323,6 +323,7 @@ impl Default for JetstreamerRunner {
                 spawn_clickhouse: clickhouse_settings.spawn_helper && clickhouse_settings.enabled,
                 builtin_plugins: Vec::new(),
                 export_format: None,
+                bucket: None,
             },
         }
     }
@@ -337,6 +338,17 @@ impl JetstreamerRunner {
     /// Overrides the log level used when initializing `solana_logger`.
     pub fn with_log_level(mut self, log_level: impl Into<String>) -> Self {
         self.log_level = log_level.into();
+        // Suppress AWS credential logs by adding filter to RUST_LOG
+        let current_rust_log = std::env::var("RUST_LOG").unwrap_or_else(|_| self.log_level.clone());
+        if !current_rust_log.contains("aws_config::profile::credentials") {
+            // Safe: We're setting this before the logger is initialized, so no race condition
+            unsafe {
+                std::env::set_var(
+                    "RUST_LOG",
+                    format!("{},aws_config::profile::credentials=off", current_rust_log),
+                );
+            }
+        }
         solana_logger::setup_with_default(&self.log_level);
         self
     }
@@ -409,6 +421,11 @@ impl JetstreamerRunner {
         // Set export format for plugins to access
         if let Some(ref format) = self.config.export_format {
             jetstreamer_utils::set_export_format(format.clone());
+        }
+
+        // Set S3 bucket for plugins to access
+        if let Some(ref bucket) = self.config.bucket {
+            jetstreamer_utils::set_bucket(bucket.clone());
         }
 
         let mut runner = PluginRunner::new(&self.clickhouse_dsn, threads);
@@ -526,6 +543,8 @@ pub struct Config {
     pub builtin_plugins: Vec<BuiltinPlugin>,
     /// Export format for plugin data (e.g., "jsonl").
     pub export_format: Option<String>,
+    /// S3 bucket name for S3 export.
+    pub bucket: Option<String>,
 }
 
 /// Built-in plugins that can be toggled via CLI flags.
@@ -603,6 +622,10 @@ pub fn parse_cli_args() -> Result<Config, Box<dyn std::error::Error>> {
                 // We'll handle --export in the post-selection code block.
                 i += 2; // skip the flag and its param
             }
+            "--bucket" => {
+                // We'll handle --bucket in the post-selection code block.
+                i += 2; // skip the flag and its param
+            }
             other if first_arg.is_none() => {
                 first_arg = Some(other.to_string());
                 i += 1;
@@ -650,6 +673,14 @@ pub fn parse_cli_args() -> Result<Config, Box<dyn std::error::Error>> {
         }
     }
 
+    // Parse --bucket flag
+    let mut bucket = None;
+    if let Some(bucket_idx) = args.iter().position(|arg| arg == "--bucket") {
+        if let Some(bucket_name) = args.get(bucket_idx + 1) {
+            bucket = Some(bucket_name.clone());
+        }
+    }
+
     Ok(Config {
         threads,
         slot_range,
@@ -657,6 +688,7 @@ pub fn parse_cli_args() -> Result<Config, Box<dyn std::error::Error>> {
         spawn_clickhouse,
         builtin_plugins,
         export_format,
+        bucket,
     })
 }
 

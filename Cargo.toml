@@ -86,6 +86,10 @@ ctrlc = "3"
 indoc = "2"
 tempfile = "3"
 libc = "0"
+aws-sdk-s3 = "1"
+aws-config = "1"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["clock"] }
 
 [dependencies]
 tokio.workspace = true
