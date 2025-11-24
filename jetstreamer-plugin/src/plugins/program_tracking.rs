@@ -178,7 +178,7 @@ impl Plugin for ProgramTrackingPlugin {
             // Write to JSONL file or S3 if export format is set and flush_rows is not None
             if let Some(ref rows) = flush_rows {
                 let export_format = get_export_format();
-                    if export_format == Some("jsonl") {
+                if export_format == Some("jsonl") {
                     write_to_jsonl("program_invocations", rows.clone())
                         .await
                         .map_err(|err| -> Box<dyn std::error::Error + Send + Sync> {
